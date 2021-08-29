@@ -26,20 +26,49 @@ extension SwiftPackage: ShellTask {
 
 }
 
-struct PackageDescription: Codable {
+struct PackageDescription: Decodable {
 
-    struct Target: Codable {
+    enum CodingKeys: String, CodingKey {
+        case name, path, targets
+    }
+
+    struct Target: Decodable {
         let name: String
         let path: String
         let sources: [String]
         let type: String
-
-        var allSourceFiles: [FileManager.Path] {
-            sources.map { path.appendingPathComponent($0) }
-        }
     }
 
     let name: String
     let path: String
     let targets: [Target]
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        name = try values.decode(String.self, forKey: .name)
+        path = try values.decode(String.self, forKey: .path)
+
+        // Map all target-related paths to be absolute.
+        // We can't use Array.map here because Swift freaks out about self being used in a closure...
+        var _targets: [Target] = []
+        for _target in try values.decode([Target].self, forKey: .targets) {
+            var _sources: [String] = []
+
+            for _source in _target.sources {
+                _sources.append(path.appendingPathComponent(_target.path).appendingPathComponent(_source))
+            }
+
+            let mappedTarget = Target(
+                name: _target.name,
+                path: path.appendingPathComponent(_target.path),
+                sources: _sources,
+                type: _target.type
+            )
+
+            _targets.append(mappedTarget)
+        }
+
+        targets = _targets
+    }
+
 }
